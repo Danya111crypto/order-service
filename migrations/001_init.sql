@@ -15,8 +15,12 @@ CREATE TABLE IF NOT EXISTS orders (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS idempotency_keys (
-    key VARCHAR PRIMARY KEY,
-    response_body TEXT NOT NULL,
-    status_code INTEGER NOT NULL
+
+DROP TABLE IF EXISTS idempotency_keys CASCADE;
+
+CREATE TABLE idempotency_keys (
+    id SERIAL PRIMARY KEY,
+    idempotency_key VARCHAR(255) UNIQUE NOT NULL,
+    response_body TEXT,
+    status_code INT
 );

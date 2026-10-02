@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package warehouse;
+
+// Опис сервісу складу та його методів
+service Warehouse {
+  // Метод для перевірки наявності товару
+  rpc CheckStock (StockRequest) returns (StockResponse);
+  
+  // Метод для резервування (списання) товару
+  rpc ReserveStock (ReserveRequest) returns (ReserveResponse);
+}
+
+// Повідомлення із типізованими полями для запиту перевірки
+message StockRequest {
+  int32 product_id = 1;
+}
+
+// Повідомлення відповіді на перевірку
+message StockResponse {
+  bool is_available = 1;
+  int32 current_stock = 2;
+  string warehouse_location = 3; // Нове поле
+}
+
+// Повідомлення для резервування товару
+message ReserveRequest {
+  int32 product_id = 1;
+  int32 quantity = 2;
+}
+
+// Повідомлення відповіді на резервування
+message ReserveResponse {
+  bool success = 1;
+  string message = 2;
+}
