@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  postgres-primary:
+    image: postgres:15
+    container_name: postgres-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: orders_db
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    command: postgres -c wal_level=replica -c max_wal_senders=3 -c archive_mode=on -c archive_command='bin/true'
+    volumes:
+      - primary_data:/var/lib/postgresql/data
+
+  postgres-replica:
+    image: postgres:15
+    container_name: postgres-replica
+    user: "postgres"
+    environment:
+      PGUSER: postgres
+      PGPASSWORD: secretpassword
+    ports:
+      - "5433:5432"
+    command: >
+      bash -c "
+      until pg_isready -h postgres-primary -U postgres; do sleep 1; done;
+      echo 'host replication all all trust' >> /primary_data/pg_hba.conf;
+      psql -h postgres-primary -U postgres -c 'SELECT pg_reload_conf();';
+      sleep 1;
+      rm -rf /var/lib/postgresql/data/*;
+      pg_basebackup -h postgres-primary -U postgres -D /var/lib/postgresql/data -P -R;
+      chmod 0700 /var/lib/postgresql/data;
+      postgres
+      "
+    depends_on:
+      - postgres-primary
+    volumes:
+      - primary_data:/primary_data
+      - replica_data:/var/lib/postgresql/data
+
+volumes:
+  primary_data:
+  replica_data:
