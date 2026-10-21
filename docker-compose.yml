@@ -11,9 +11,14 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
       - "5432:5432"
-    command: postgres -c wal_level=replica -c max_wal_senders=3 -c archive_mode=on -c archive_command='bin/true'
+    command: postgres -c wal_level=replica -c max_wal_senders=3 -c archive_mode=on -c archive_command='/bin/true'
     volumes:
       - primary_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orders_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres-replica:
     image: postgres:15
@@ -36,11 +41,65 @@ services:
       postgres
       "
     depends_on:
-      - postgres-primary
+      postgres-primary:
+        condition: service_healthy
     volumes:
       - primary_data:/primary_data
       - replica_data:/var/lib/postgresql/data
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: order-api
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    working_dir: /app/order_service
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:secretpassword@postgres-primary:5432/orders_db
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python consumer.py
+    working_dir: /app/order_service
+    environment:
+      - DATABASE_URL=postgresql://postgres:secretpassword@postgres-primary:5432/orders_db
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   primary_data:
   replica_data:
+  rabbitmq_data:
