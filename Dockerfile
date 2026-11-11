@@ -1,39 +1,34 @@
-# ---------------------------------------------------
-# Stage 1: Builder (Збірка та встановлення залежностей)
-# ---------------------------------------------------
+# Stage 1: Builder (Збірка залежностей у venv)
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Встановлюємо системні залежності для збірки (якщо потрібні)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Копіюємо файл залежностей та збираємо wheels
-COPY order_service/requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# ---------------------------------------------------
+COPY order_service/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
 # Stage 2: Final (Мінімальний робочий образ)
-# ---------------------------------------------------
 FROM python:3.11-slim AS runner
 
 WORKDIR /app
 
-# Створюємо непривілейованого користувача для безпеки
 RUN adduser --disabled-password --gecos "" appuser
 
-# Копіюємо тільки встановлені пакеті з етапу builder
-COPY --from=builder /root/.local /home/appuser/.local
+# Копіюємо ізольоване віртуальне оточення з builder
+COPY --from=builder /opt/venv /opt/venv
 COPY order_service /app/order_service
 
-# Налаштовуємо оточення
-ENV PATH=/home/appuser/.local/bin:$PATH \
+ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app/order_service
 
 USER appuser
+WORKDIR /app/order_service
 
-# Дефолтна команда (може бути перевизначена)
-CMD ["python", "order_service/main.py"]
+CMD ["python", "main.py"]
